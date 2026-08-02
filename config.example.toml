@@ -1,0 +1,50 @@
+# sensor-lens configuration (example).
+#
+# Copy to your config dir and edit:
+#   macOS   ~/Library/Application Support/sensor-lens/config.toml
+#   other   ~/.config/sensor-lens/config.toml
+#
+# Keep it mode 0600 — it holds your SwitchBot credentials. `sensor-lens doctor`
+# checks that for you. Every value except the credentials is OPTIONAL.
+
+[switchbot]
+# Issue these in the SwitchBot app: Profile -> Preferences -> tap "App Version"
+# ten times -> Developer Options -> Get Token. Requires app v6.14 or later.
+#
+# The SWITCHBOT_TOKEN and SWITCHBOT_SECRET environment variables override these
+# for interactive use. The daemon runs under launchd, where your shell
+# environment does not reach it, so for the daemon this file is the only source.
+token  = "REPLACE_WITH_YOUR_SWITCHBOT_TOKEN"
+secret = "REPLACE_WITH_YOUR_SWITCHBOT_SECRET"
+
+[polling]
+# How often each collected device is read, in seconds. The meters themselves
+# only report every minute or two, so going below 60 buys nothing and spends
+# quota faster.
+# interval_seconds = 300
+
+# The COLLECT SET: which devices are polled and stored. Device IDs or names as
+# they read in the app. Leave empty to collect every device whose status carries
+# an ambient measurement (temperature, humidity, CO2, illuminance).
+#
+# This is not the same as what a menu-bar GUI displays — collect the whole
+# house here and let the GUI show the two readings you care about.
+# devices = ["CO2センサー (Room 1)", "防水温湿度計"]
+
+[api]
+# Calls sensor-lens will spend per local day. The account limit is 10000, and
+# going over it makes the API answer "Unauthorized" — indistinguishable from a
+# bad token. The default leaves room for ad-hoc commands and other clients.
+# daily_budget = 8000
+
+# Network timeout per HTTP exchange, in seconds.
+# timeout_seconds = 20
+
+[storage]
+# Where readings are stored. Point this at a synced folder for loose
+# cross-device history (single writer only — one machine's daemon).
+# db_path = "~/Library/Application Support/sensor-lens/sensors.db"
+
+# How long raw readings are kept, in days. 0 keeps them forever.
+# At the default 5-minute cadence, five sensors cost roughly 100 MB a year.
+# retention_days = 400
