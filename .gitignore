@@ -1,0 +1,27 @@
+# Build artifacts
+dist/
+
+# Go
+*.test
+*.out
+
+# Local durable store (never commit real sensor data — it maps your home)
+*.db
+*.db-wal
+*.db-shm
+
+# Credentials / config with machine-specific values (holds the SwitchBot token)
+.env
+config.toml
+
+# macOS
+.DS_Store
+
+# Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Claude Code
+.claude/
