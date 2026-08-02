@@ -16,28 +16,37 @@ import (
 // database, a network or a clock.
 
 // units renders a metric's value the way that metric is read.
+//
+// A prefix is carried wherever the number alone would be ambiguous on a line
+// with others: two bare percentages side by side do not say which is humidity
+// and which is charge, and an illuminance level of "1" says nothing at all.
 var units = map[string]struct {
+	prefix    string
 	suffix    string
 	precision int
 }{
-	"temperature_c":         {"°C", 1},
-	"humidity_pct":          {"%", 0},
-	"co2_ppm":               {" ppm", 0},
-	"battery_pct":           {"%", 0},
-	"light_level":           {"", 0},
-	"dew_point_c":           {"°C", 1},
-	"vpd_kpa":               {" kPa", 2},
-	"absolute_humidity_gm3": {" g/m³", 1},
-	"move_detected":         {"", 0},
+	"temperature_c":         {"", "°C", 1},
+	"humidity_pct":          {"", "%", 0},
+	"co2_ppm":               {"", " ppm", 0},
+	"battery_pct":           {"bat ", "%", 0},
+	"light_level":           {"light ", "", 0},
+	"move_detected":         {"motion ", "", 0},
+	"dew_point_c":           {"dew ", "°C", 1},
+	"vpd_kpa":               {"vpd ", " kPa", 2},
+	"absolute_humidity_gm3": {"abs ", " g/m³", 1},
 }
 
 // FormatValue renders one reading's value with its unit.
+//
+// An unrecognized metric is printed as name=value: extraction deliberately
+// passes unknown API fields through, so this path is reached whenever a device
+// reports something new, and a bare number would be unreadable.
 func FormatValue(metric string, v float64) string {
 	u, ok := units[metric]
 	if !ok {
-		return strconv.FormatFloat(v, 'f', -1, 64)
+		return metric + "=" + strconv.FormatFloat(v, 'f', -1, 64)
 	}
-	return strconv.FormatFloat(v, 'f', u.precision, 64) + u.suffix
+	return u.prefix + strconv.FormatFloat(v, 'f', u.precision, 64) + u.suffix
 }
 
 // FormatDuration renders a span the way a person would say it.
@@ -102,6 +111,28 @@ func GroupReadings(readings []store.Reading, devices []store.Device, now int64, 
 		out = append(out, *dr)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
+}
+
+// FilterCollected keeps only readings from devices currently being collected.
+//
+// A device dropped from the collect set keeps its stored history — that is
+// history, and deleting it silently would be wrong — but it has no "now", and
+// leaving its last values on screen would show a room that stopped being
+// measured as though it still were. A reading whose device is not in the table
+// at all is kept: it is not evidence of anything having been turned off.
+func FilterCollected(readings []store.Reading, devices []store.Device) []store.Reading {
+	known := make(map[string]bool, len(devices))
+	for _, d := range devices {
+		known[d.DeviceID] = d.Enabled
+	}
+
+	out := make([]store.Reading, 0, len(readings))
+	for _, r := range readings {
+		if enabled, ok := known[r.DeviceID]; !ok || enabled {
+			out = append(out, r)
+		}
+	}
 	return out
 }
 

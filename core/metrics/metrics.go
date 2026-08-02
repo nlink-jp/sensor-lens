@@ -32,14 +32,22 @@ var canonical = map[string]string{
 	"moveDetected": "move_detected",
 }
 
-// environmental is the subset that makes a device worth polling on a schedule.
-// Battery alone does not: sensor-lens is not a battery monitor, and a device
-// that only reports its own charge has nothing to chart.
-var environmental = map[string]bool{
+// ambient is the set of metrics that mean "this device measures the room",
+// which is what makes it worth polling on a schedule.
+//
+// Only temperature and CO2 qualify, and the omissions are the interesting part.
+// Humidity is not enough on its own: a humidifier reports a humidity field too
+// (0 when it is not sensing) alongside mode and childLock, and it is an
+// appliance describing itself, not a sensor describing the room. Illuminance
+// and battery are likewise things a device can report without measuring the
+// ambient conditions anyone wants charted.
+//
+// Anything excluded here can still be collected — name it in the config's
+// collect set and it is polled without argument. This governs only what is
+// picked up automatically.
+var ambient = map[string]bool{
 	"temperature_c": true,
-	"humidity_pct":  true,
 	"co2_ppm":       true,
-	"light_level":   true,
 }
 
 // Name returns the metric name stored for an API field.
@@ -70,14 +78,14 @@ func Extract(body map[string]any) []Reading {
 	return out
 }
 
-// IsEnvironmental reports whether a metric is one of the ambient measurements
-// that justify polling a device.
-func IsEnvironmental(metric string) bool { return environmental[metric] }
+// IsAmbient reports whether a metric measures the room rather than the device.
+func IsAmbient(metric string) bool { return ambient[metric] }
 
-// HasEnvironmental reports whether any reading is an ambient measurement.
-func HasEnvironmental(readings []Reading) bool {
+// HasAmbient reports whether any reading measures the room, i.e. whether this
+// device is a sensor worth collecting without being asked.
+func HasAmbient(readings []Reading) bool {
 	for _, r := range readings {
-		if IsEnvironmental(r.Metric) {
+		if IsAmbient(r.Metric) {
 			return true
 		}
 	}

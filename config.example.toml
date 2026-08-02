@@ -2,7 +2,11 @@
 #
 # Copy to your config dir and edit:
 #   macOS   ~/Library/Application Support/sensor-lens/config.toml
+#           (~/.config/sensor-lens/config.toml is honoured too, and wins)
 #   other   ~/.config/sensor-lens/config.toml
+#
+# `sensor-lens doctor` prints which file it read, and lists where it looked
+# when there is none.
 #
 # Keep it mode 0600 — it holds your SwitchBot credentials. `sensor-lens doctor`
 # checks that for you. Every value except the credentials is OPTIONAL.
@@ -24,8 +28,9 @@ secret = "REPLACE_WITH_YOUR_SWITCHBOT_SECRET"
 # interval_seconds = 300
 
 # The COLLECT SET: which devices are polled and stored. Device IDs or names as
-# they read in the app. Leave empty to collect every device whose status carries
-# an ambient measurement (temperature, humidity, CO2, illuminance).
+# they read in the app. Leave empty to collect every device that reports
+# temperature or CO2 — the measurements that describe the room rather than the
+# device. (Humidity alone does not qualify: a humidifier reports one too.)
 #
 # This is not the same as what a menu-bar GUI displays — collect the whole
 # house here and let the GUI show the two readings you care about.

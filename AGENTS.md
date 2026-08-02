@@ -98,10 +98,20 @@ hardware:
   chart mixing them looks like a staircase; that is the device, not a bug.
 - Webhook `deviceType` strings are a different namespace from status ones
   (`Meter`→`WoMeter`, `Hub 2`→`WoHub2`). Do not treat them as interchangeable.
-- Japanese product names do not match API device types: デイリーステーション is
-  `Home Climate Panel`, which reports temperature/humidity/moveDetected/
-  brightness (note `brightness` 1–100, a different scale from Hub 2's
-  `lightLevel` 1–20 — they are deliberately kept as separate metrics).
+- Japanese product names do not match API device types. Observed on real
+  hardware: デイリーステーション reports as **`WeatherStation`**
+  (temperature/humidity/battery). Do not guess these from the product name —
+  `Home Climate Panel` is a *different* device that also exists and reports
+  `brightness` 1–100, itself a different scale from Hub 2's `lightLevel` 1–20,
+  which is why they are kept as separate metrics rather than merged.
+- **Auto-classification cannot key on humidity.** A `Humidifier2` returns
+  `{"humidity":0,"mode":0,"childLock":0,"drying":0}` — an appliance describing
+  itself, not a sensor describing the room — and enabling it spends quota on
+  noise. Hence `metrics.ambient` is temperature and CO2 only. Verified on real
+  hardware: 30 devices, 15 correctly auto-collected.
+- The classification is **durable**, so correcting the rule does not reach
+  devices already in the database. `devices --reclassify` re-probes them; that
+  is the migration path for any future change to `ambient`.
 
 ## Facts about the app's CSV export
 
@@ -123,7 +133,9 @@ Determined from real exports of five devices:
 
 ## Status
 
-Phase 1 (CLI) implemented: `make build` / `make test` / `make vet` green. The
-import path is verified end-to-end against real app exports (5 devices, 15,519
-readings, re-import inserts 0). Live API polling still needs a token on real
-hardware. Phase 2 is the Swift menu-bar GUI. See `docs/en/sensor-lens-rfp.md`.
+Phase 1 (CLI) implemented and verified on real hardware: `make build` /
+`make test` / `make vet` green; 30 devices discovered and 15 correctly
+auto-collected; live polling, `report` and `gaps` exercised; five real app
+exports imported (15,519 readings) with a re-import inserting 0.
+
+Phase 2 is the Swift menu-bar GUI. See `docs/en/sensor-lens-rfp.md`.

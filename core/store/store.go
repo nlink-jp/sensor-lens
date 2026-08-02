@@ -321,6 +321,28 @@ func (s *Store) Prune(ctx context.Context, before int64) (int64, error) {
 	return res.RowsAffected()
 }
 
+// PruneDevice deletes every reading from one device, returning how many went.
+//
+// For a device that turned out never to have been a sensor — an appliance whose
+// status merely looked like one — whose stored rows are noise rather than
+// history. The device row itself stays, so it is not re-probed and re-collected
+// on the next refresh.
+func (s *Store) PruneDevice(ctx context.Context, deviceID string) (int64, error) {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM readings WHERE device_id = ?`, deviceID)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
+// CountDeviceReadings returns how many readings one device has stored.
+func (s *Store) CountDeviceReadings(ctx context.Context, deviceID string) (int64, error) {
+	var n int64
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM readings WHERE device_id = ?`, deviceID).Scan(&n)
+	return n, err
+}
+
 // AddAPICalls adds n to the running call count for a local day (YYYY-MM-DD)
 // and returns the new total.
 //

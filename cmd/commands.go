@@ -33,6 +33,7 @@ func runDevices(args []string) error {
 	asJSON := fs.Bool("json", false, "emit JSON")
 	raw := fs.Bool("raw", false, "print the untouched API response for each device")
 	refresh := fs.Bool("refresh", false, "re-read the device list from the API")
+	reclassify := fs.Bool("reclassify", false, "re-decide which devices are collected, re-probing known ones (costs one call per device)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -52,12 +53,12 @@ func runDevices(args []string) error {
 	if err != nil {
 		return err
 	}
-	if *refresh || len(devices) == 0 {
+	if *refresh || *reclassify || len(devices) == 0 {
 		p, err := e.poller(!*asJSON)
 		if err != nil {
 			return err
 		}
-		if devices, err = p.RefreshDevices(ctx); err != nil {
+		if devices, err = p.RefreshDevices(ctx, *reclassify); err != nil {
 			return err
 		}
 	}
@@ -125,7 +126,7 @@ func runNow(args []string) error {
 			return err
 		}
 		if len(known) == 0 {
-			if _, err := p.RefreshDevices(ctx); err != nil {
+			if _, err := p.RefreshDevices(ctx, false); err != nil {
 				return err
 			}
 		}
@@ -147,7 +148,7 @@ func runNow(args []string) error {
 		return err
 	}
 
-	grouped := GroupReadings(latest, known, time.Now().Unix(), e.interval())
+	grouped := GroupReadings(FilterCollected(latest, known), known, time.Now().Unix(), e.interval())
 	if filter := splitCSV(*devices); len(filter) > 0 {
 		grouped = filterReadings(grouped, filter)
 	}
@@ -336,7 +337,8 @@ func runGaps(args []string) error {
 		return err
 	}
 
-	gaps := aggregate.Gaps(readings, aggregate.GapOptions{
+	// A device no longer collected would otherwise report one endless gap.
+	gaps := aggregate.Gaps(FilterCollected(readings, devices), aggregate.GapOptions{
 		Expected: e.interval(),
 		Factor:   *factor,
 		Since:    from.Unix(),
@@ -649,7 +651,14 @@ func runDoctor(args []string) error {
 			fmt.Printf("  ✓ mode %04o\n", mode)
 		}
 	} else {
-		fmt.Printf("  · absent (defaults in use)\n")
+		// Say where it looked. A config file that exists somewhere unread is
+		// otherwise indistinguishable from one that was never written.
+		fmt.Printf("  · absent (defaults in use); searched:\n")
+		if paths, err := platform.ConfigSearchPaths(); err == nil {
+			for _, p := range paths {
+				fmt.Printf("      %s\n", p)
+			}
+		}
 	}
 
 	fmt.Printf("credentials   token from %s, secret from %s\n", e.cfg.TokenSource, e.cfg.SecretSource)
@@ -795,6 +804,7 @@ func runUninstall(args []string) error {
 func runPrune(args []string) error {
 	fs := newFlagSet("prune")
 	keepDays := fs.Int("keep-days", 0, "delete readings older than this many days (default: storage.retention_days)")
+	device := fs.String("device", "", "delete every reading from this device instead")
 	dryRun := fs.Bool("dry-run", false, "report what would go without deleting")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -806,6 +816,10 @@ func runPrune(args []string) error {
 	}
 	defer e.Close()
 	ctx := signalContext()
+
+	if *device != "" {
+		return pruneDevice(ctx, e, *device, *dryRun)
+	}
 
 	days := *keepDays
 	if days == 0 {
@@ -831,6 +845,29 @@ func runPrune(args []string) error {
 		return err
 	}
 	fmt.Printf("deleted %d reading(s) older than %s\n", n, time.Unix(cutoff, 0).Format("2006-01-02"))
+	return nil
+}
+
+// pruneDevice drops one device's stored readings — for an appliance that was
+// collected by mistake and whose rows are noise, not history.
+func pruneDevice(ctx context.Context, e *env, ref string, dryRun bool) error {
+	id, err := resolveDevice(ctx, e, ref)
+	if err != nil {
+		return err
+	}
+	n, err := e.store.CountDeviceReadings(ctx, id)
+	if err != nil {
+		return err
+	}
+	if dryRun {
+		fmt.Printf("would delete %d reading(s) from %s (%s)\n", n, ref, id)
+		return nil
+	}
+	deleted, err := e.store.PruneDevice(ctx, id)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("deleted %d reading(s) from %s (%s)\n", deleted, ref, id)
 	return nil
 }
 

@@ -55,21 +55,28 @@ code change.
 
 | API field    | Stored as       | Devices |
 |--------------|-----------------|---------|
-| `temperature`| `temperature_c` | all meters, Hub 2 / Hub 3, Home Climate Panel |
+| `temperature`| `temperature_c` | all meters, Hub 2 / Hub 3, Daily Station |
 | `humidity`   | `humidity_pct`  | same |
 | `CO2`        | `co2_ppm`       | **Meter Pro CO2 only** |
 | `battery`    | `battery_pct`   | battery-powered meters |
 | `lightLevel` | `light_level`   | Hub 2 (1–20), Hub 3 (1–10) |
 | anything else numeric | its API name | whatever reports it |
 
+A device is collected automatically only if it reports **temperature or CO2** —
+the measurements that describe the room rather than the device. Humidity alone
+is not enough: a humidifier reports a humidity field too, next to its own mode
+and child lock, and collecting it would spend quota on noise. Anything left out
+can still be collected by naming it in `[polling] devices`.
+
 `sensor-lens devices --raw` prints the untouched API response when you want to
-see exactly what a device sent.
+see exactly what a device sent, and `devices --reclassify` re-decides what is
+collected (one call per device).
 
 ## Commands
 
 | Command | What it does |
 |---------|--------------|
-| `devices [--json] [--raw] [--refresh]` | List the devices and which are collected |
+| `devices [--json] [--raw] [--refresh] [--reclassify]` | List the devices and which are collected |
 | `now [--json] [--devices ids] [--stored]` | Read the sensors now (or show the last stored values) |
 | `daemon` | Run the resident collector |
 | `history --device D --metric M [--since --until --bucket 5m] [--json]` | One metric over time |
@@ -80,7 +87,7 @@ see exactly what a device sent.
 | `status [--json]` | Daemon state, DB path, calls spent today |
 | `doctor` | Diagnose config, credentials, quota, connectivity |
 | `install` / `uninstall` | Register / remove the launchd LaunchAgent |
-| `prune [--keep-days N] [--dry-run]` | Delete old readings |
+| `prune [--keep-days N \| --device D] [--dry-run]` | Delete old readings, or one device's |
 | `version` | Print the version |
 
 Time flags accept `2026-08-01`, `2026-08-01 15:04`, or an offset: `-3h`, `-7d`.

@@ -22,19 +22,56 @@ const (
 	FileMode os.FileMode = 0o600
 )
 
-// ConfigDir returns the per-user config directory.
+// ConfigFileName is the config file's basename.
+const ConfigFileName = "config.toml"
+
+// ConfigDir returns the canonical per-user config directory — where a config
+// file is created if there is not one already.
 func ConfigDir() (string, error) { return configDir() }
 
 // DataDir returns the per-user durable data directory (holds the DB).
 func DataDir() (string, error) { return dataDir() }
 
-// ConfigFilePath returns the path to config.toml.
+// ConfigSearchPaths lists the config files consulted, in priority order.
+//
+// macOS has two conventions and people use both: the platform's Application
+// Support directory, and ~/.config as on every other Unix. Honouring only one
+// of them means a config file that exists and is simply never read, with
+// nothing to say why — so both are searched, and `doctor` prints the list.
+func ConfigSearchPaths() ([]string, error) {
+	dirs, err := configSearchDirs()
+	if err != nil {
+		return nil, err
+	}
+	paths := make([]string, 0, len(dirs))
+	seen := make(map[string]bool, len(dirs))
+	for _, d := range dirs {
+		p := filepath.Join(d, ConfigFileName)
+		if !seen[p] {
+			seen[p] = true
+			paths = append(paths, p)
+		}
+	}
+	return paths, nil
+}
+
+// ConfigFilePath returns the config file to read: the first search path that
+// exists, or the canonical path when none do.
 func ConfigFilePath() (string, error) {
+	paths, err := ConfigSearchPaths()
+	if err != nil {
+		return "", err
+	}
+	for _, p := range paths {
+		if _, err := os.Stat(p); err == nil {
+			return p, nil
+		}
+	}
 	d, err := configDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(d, "config.toml"), nil
+	return filepath.Join(d, ConfigFileName), nil
 }
 
 // EnsureDir creates a directory owner-only, tightening one that already exists

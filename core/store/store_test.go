@@ -311,6 +311,35 @@ func TestPrune(t *testing.T) {
 	}
 }
 
+func TestPruneDevice(t *testing.T) {
+	s := openTest(t)
+	ctx := context.Background()
+
+	if _, err := s.InsertReadings(ctx, []Reading{
+		{DeviceID: "HUM", Metric: "humidity_pct", TS: 1000, Value: 0},
+		{DeviceID: "HUM", Metric: "mode", TS: 1000, Value: 0},
+		{DeviceID: "AAA", Metric: "temperature_c", TS: 1000, Value: 27},
+	}, false); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	if n, err := s.CountDeviceReadings(ctx, "HUM"); err != nil || n != 2 {
+		t.Fatalf("CountDeviceReadings() = %d, %v; want 2, nil", n, err)
+	}
+
+	n, err := s.PruneDevice(ctx, "HUM")
+	if err != nil {
+		t.Fatalf("PruneDevice() error = %v", err)
+	}
+	if n != 2 {
+		t.Errorf("PruneDevice() removed %d rows, want 2", n)
+	}
+	// Only the named device goes.
+	if total, _ := s.CountReadings(ctx); total != 1 {
+		t.Errorf("%d readings left, want the other device's 1", total)
+	}
+}
+
 func TestAPICallAccounting(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()

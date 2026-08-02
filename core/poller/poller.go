@@ -112,7 +112,11 @@ type Result struct {
 // Without one, a device the poller has never seen is probed once and enabled
 // only if its status carries an ambient measurement — that one-off call is how
 // a CO2 meter is told apart from a plug without hardcoding device types.
-func (p *Poller) RefreshDevices(ctx context.Context) ([]store.Device, error) {
+//
+// reprobe re-runs that classification for devices already known. The verdict is
+// durable, so without it a device classified under an older rule keeps its old
+// answer forever; it costs one call per device, hence not the default.
+func (p *Poller) RefreshDevices(ctx context.Context, reprobe bool) ([]store.Device, error) {
 	remote, err := p.api.Devices(ctx)
 	p.spend(ctx, 1)
 	if err != nil {
@@ -142,7 +146,7 @@ func (p *Poller) RefreshDevices(ctx context.Context) ([]store.Device, error) {
 		switch {
 		case explicit:
 			rec.Enabled = p.inCollectSet(d)
-		case seen[d.DeviceID]:
+		case seen[d.DeviceID] && !reprobe:
 			// Already classified; UpsertDevices preserves the stored flag.
 			rec.Enabled = true
 		default:
@@ -154,9 +158,9 @@ func (p *Poller) RefreshDevices(ctx context.Context) ([]store.Device, error) {
 	if err := p.store.UpsertDevices(ctx, devices, now); err != nil {
 		return nil, err
 	}
-	// UpsertDevices deliberately never re-enables a known device, so an
-	// explicit collect set has to be applied on top of it.
-	if explicit {
+	// UpsertDevices deliberately never re-enables a known device, so both an
+	// explicit collect set and a re-probe have to be applied on top of it.
+	if explicit || reprobe {
 		for _, d := range devices {
 			if err := p.store.SetEnabled(ctx, d.DeviceID, d.Enabled); err != nil {
 				return nil, err
@@ -187,7 +191,7 @@ func (p *Poller) probeHasSensors(ctx context.Context, d switchbot.Device) bool {
 		p.logf("probe %s (%s): %v", d.DeviceName, d.DeviceID, err)
 		return false
 	}
-	return metrics.HasEnvironmental(metrics.Extract(body))
+	return metrics.HasAmbient(metrics.Extract(body))
 }
 
 // PollOnce reads every enabled device once and stores the readings.
@@ -260,7 +264,7 @@ func (p *Poller) Run(ctx context.Context) error {
 		// The device list changes rarely; once a day is enough, and it keeps
 		// the refresh off the per-round budget.
 		if p.clock.Now().Sub(lastRefresh) >= 24*time.Hour {
-			if _, err := p.RefreshDevices(ctx); err != nil {
+			if _, err := p.RefreshDevices(ctx, false); err != nil {
 				p.logf("refresh devices: %v", err)
 				if p.handleErr(err) {
 					if err := p.wait(ctx); err != nil {

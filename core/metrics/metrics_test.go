@@ -136,24 +136,30 @@ func TestExtractEmptyBody(t *testing.T) {
 	}
 }
 
-func TestHasEnvironmental(t *testing.T) {
+func TestHasAmbient(t *testing.T) {
 	tests := []struct {
 		name string
 		body string
 		want bool
 	}{
-		{"co2 meter", `{"temperature":22,"CO2":800}`, true},
-		{"hub with ambient sensors", `{"temperature":13,"lightLevel":19}`, true},
-		// A device that only reports its own charge has nothing to chart, so it
-		// must not be pulled into the polling schedule and spend quota.
+		{"co2 meter", `{"temperature":22,"humidity":47,"CO2":800}`, true},
+		{"meter", `{"temperature":26.1,"humidity":52,"battery":60}`, true},
+		{"hub 2", `{"temperature":13,"humidity":18,"lightLevel":19}`, true},
+		// Observed on real hardware: a humidifier reports a humidity field (0
+		// when it is not sensing) next to its own mode and child lock. It is an
+		// appliance describing itself, not a sensor describing the room, and
+		// auto-collecting it spends quota on nothing.
+		{"humidifier", `{"deviceType":"Humidifier2","humidity":0,"mode":0,"childLock":0,"drying":0}`, false},
+		{"plug", `{"voltage":100,"weight":12,"electricCurrent":120}`, false},
+		// A device reporting only its own charge has nothing to chart.
 		{"battery only", `{"battery":80}`, false},
 		{"no scalars", `{"deviceType":"Bot","power":"on"}`, false},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := HasEnvironmental(Extract(decode(t, tc.body))); got != tc.want {
-				t.Errorf("HasEnvironmental() = %v, want %v", got, tc.want)
+			if got := HasAmbient(Extract(decode(t, tc.body))); got != tc.want {
+				t.Errorf("HasAmbient() = %v, want %v", got, tc.want)
 			}
 		})
 	}

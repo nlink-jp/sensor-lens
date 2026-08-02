@@ -63,13 +63,20 @@ status のレスポンスは機種ごとに分岐せず、フィールド単位�
 | `lightLevel` | `light_level` | ハブ2 (1–20)、ハブ3 (1–10) |
 | その他の数値 | API のフィールド名のまま | それを返すデバイス |
 
-`sensor-lens devices --raw` で、API が実際に返した生のレスポンスを確認できます。
+自動で収集対象になるのは**温度または CO2 を返すデバイスだけ**です。この2つが
+「デバイス自身ではなく部屋の状態」を表す測定値だからです。湿度だけでは足りません
+— 加湿器も humidity フィールドを（自分の mode や childLock と並べて）返すため、
+収集すると API 予算をノイズに使ってしまいます。除外されたデバイスも
+`[polling] devices` に名前を書けば収集できます。
+
+`sensor-lens devices --raw` で API が実際に返した生のレスポンスを確認でき、
+`devices --reclassify` で収集対象を判定し直せます（デバイス1台につき1コール）。
 
 ## コマンド
 
 | コマンド | 内容 |
 |---|---|
-| `devices [--json] [--raw] [--refresh]` | デバイス一覧と収集対象かどうか |
+| `devices [--json] [--raw] [--refresh] [--reclassify]` | デバイス一覧と収集対象かどうか |
 | `now [--json] [--devices ids] [--stored]` | いまの値を読む (`--stored` は保存済みの最新値) |
 | `daemon` | 常駐コレクターを実行 |
 | `history --device D --metric M [--since --until --bucket 5m] [--json]` | 1 metric の時系列 |
@@ -80,7 +87,7 @@ status のレスポンスは機種ごとに分岐せず、フィールド単位�
 | `status [--json]` | デーモン状態・DB パス・本日の API コール数 |
 | `doctor` | 設定・認証情報・予算・疎通の診断 |
 | `install` / `uninstall` | launchd LaunchAgent の登録 / 解除 |
-| `prune [--keep-days N] [--dry-run]` | 古い測定値を削除 |
+| `prune [--keep-days N \| --device D] [--dry-run]` | 古い測定値、または特定デバイスの記録を削除 |
 | `version` | バージョン表示 |
 
 時刻オプションは `2026-08-01`、`2026-08-01 15:04`、相対指定 `-3h` / `-7d` を

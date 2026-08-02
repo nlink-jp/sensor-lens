@@ -30,3 +30,21 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - launchd LaunchAgent integration for login-time collection on macOS.
 - Collect set (`[polling] devices`) kept separate from what any front end
   displays, so a whole house can be collected while two readings are shown.
+
+### Fixed
+
+Found while first running against real hardware (30 devices):
+
+- On macOS, `~/.config/sensor-lens/config.toml` is now read as well as the
+  Application Support copy, and `doctor` lists the paths it searched. A config
+  file that exists but is silently never read is the worst possible outcome.
+- A device is auto-collected only if it reports temperature or CO2. Humidity
+  alone pulled in humidifiers, which report a humidity field (0 when not
+  sensing) beside their own mode and child lock. `devices --reclassify`
+  re-decides for devices already classified, and `prune --device` removes the
+  readings such a device left behind.
+- `now` no longer shows devices dropped from the collect set, and `gaps` no
+  longer reports one endless gap for them. Their stored history is kept.
+- Values that would be ambiguous on a shared line are labelled: `bat 100%`
+  next to a humidity `47%`, `light 1` for an illuminance level, and
+  `name=value` for a metric with no known unit.

@@ -19,3 +19,11 @@ func configDir() (string, error) {
 }
 
 func dataDir() (string, error) { return configDir() }
+
+func configSearchDirs() ([]string, error) {
+	d, err := configDir()
+	if err != nil {
+		return nil, err
+	}
+	return []string{d}, nil
+}

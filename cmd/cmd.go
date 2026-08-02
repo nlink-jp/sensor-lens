@@ -15,6 +15,7 @@ Usage:
 
 Commands:
   devices [--json] [--raw] [--refresh]   List the devices on your account
+          [--reclassify]                 ...re-deciding which ones are collected
   now     [--json] [--devices ids]       Read the sensors right now
   daemon                                 Run the resident collector
   history [flags]                        One metric over time (--device --metric --since --until)
@@ -26,7 +27,7 @@ Commands:
   doctor                                 Diagnose config, credentials and quota
   install                                Register the login-time LaunchAgent
   uninstall                              Remove the LaunchAgent
-  prune   --keep-days N                  Delete readings older than N days
+  prune   --keep-days N | --device D     Delete readings older than N days, or one device's
   version                                Print the version
 
 Credentials come from ` + "`config.toml`" + ` (or SWITCHBOT_TOKEN / SWITCHBOT_SECRET).

@@ -19,11 +19,14 @@ func TestFormatValue(t *testing.T) {
 		{"temperature_c", 27.24, "27.2°C"},
 		{"humidity_pct", 47, "47%"},
 		{"co2_ppm", 1148, "1148 ppm"},
-		{"battery_pct", 100, "100%"},
-		{"vpd_kpa", 1.914, "1.91 kPa"},
-		// An unrecognized metric still has to print something sensible: the
+		// Labelled: a second bare "%" on the same line as humidity, or a bare
+		// "1" for illuminance, tells the reader nothing.
+		{"battery_pct", 100, "bat 100%"},
+		{"light_level", 1, "light 1"},
+		{"vpd_kpa", 1.914, "vpd 1.91 kPa"},
+		// An unrecognized metric still has to print something readable: the
 		// extractor deliberately passes unknown API fields through.
-		{"brightness", 42, "42"},
+		{"brightness", 42, "brightness=42"},
 	}
 
 	for _, tc := range tests {
@@ -233,6 +236,31 @@ func TestSplitCSV(t *testing.T) {
 	}
 	if got := splitCSV(""); got != nil {
 		t.Errorf("splitCSV(\"\") = %v, want nil", got)
+	}
+}
+
+func TestFilterCollected(t *testing.T) {
+	devices := []store.Device{
+		{DeviceID: "AAA", Name: "Room 1", Enabled: true},
+		{DeviceID: "HUM", Name: "加湿器", Enabled: false},
+	}
+	readings := []store.Reading{
+		{DeviceID: "AAA", Metric: "temperature_c", TS: 1000, Value: 27},
+		{DeviceID: "HUM", Metric: "humidity_pct", TS: 1000, Value: 0},
+		// Not in the devices table at all: keep it, that is not evidence of
+		// anything having been switched off.
+		{DeviceID: "GHOST", Metric: "temperature_c", TS: 1000, Value: 20},
+	}
+
+	got := FilterCollected(readings, devices)
+
+	if len(got) != 2 {
+		t.Fatalf("FilterCollected() = %+v, want 2 readings", got)
+	}
+	for _, r := range got {
+		if r.DeviceID == "HUM" {
+			t.Error("a device dropped from the collect set still shows a current reading")
+		}
 	}
 }
 

@@ -65,10 +65,75 @@ func TestConfigFilePath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ConfigFilePath() error = %v", err)
 	}
-	if filepath.Base(got) != "config.toml" {
-		t.Errorf("ConfigFilePath() = %q, want it to end in config.toml", got)
+	if filepath.Base(got) != ConfigFileName {
+		t.Errorf("ConfigFilePath() = %q, want it to end in %s", got, ConfigFileName)
 	}
 	if filepath.Base(filepath.Dir(got)) != AppName {
 		t.Errorf("ConfigFilePath() = %q, want it under a %s directory", got, AppName)
+	}
+}
+
+func TestConfigSearchPathsAreDistinctAndNamed(t *testing.T) {
+	paths, err := ConfigSearchPaths()
+	if err != nil {
+		t.Fatalf("ConfigSearchPaths() error = %v", err)
+	}
+	if len(paths) == 0 {
+		t.Fatal("ConfigSearchPaths() = none")
+	}
+	seen := map[string]bool{}
+	for _, p := range paths {
+		if seen[p] {
+			t.Errorf("duplicate search path %q", p)
+		}
+		seen[p] = true
+		if filepath.Base(p) != ConfigFileName {
+			t.Errorf("search path %q does not end in %s", p, ConfigFileName)
+		}
+	}
+}
+
+func TestConfigFilePathPrefersAnExistingFile(t *testing.T) {
+	// XDG_CONFIG_HOME is searched first, so a file placed there must win over
+	// the platform default — a config that exists and is silently never read is
+	// the worst possible outcome.
+	//
+	// HOME is redirected too, or the developer's own config file joins the
+	// search and the test stops being about anything.
+	dir := t.TempDir()
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", dir)
+
+	want := filepath.Join(dir, AppName, ConfigFileName)
+	if err := os.MkdirAll(filepath.Dir(want), 0o700); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(want, []byte("[switchbot]\n"), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	got, err := ConfigFilePath()
+	if err != nil {
+		t.Fatalf("ConfigFilePath() error = %v", err)
+	}
+	if got != want {
+		t.Errorf("ConfigFilePath() = %q, want the existing %q", got, want)
+	}
+}
+
+func TestConfigFilePathFallsBackToCanonical(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())            // no real config to stumble on
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir()) // empty: nothing to find
+
+	got, err := ConfigFilePath()
+	if err != nil {
+		t.Fatalf("ConfigFilePath() error = %v", err)
+	}
+	canonical, err := ConfigDir()
+	if err != nil {
+		t.Fatalf("ConfigDir() error = %v", err)
+	}
+	if want := filepath.Join(canonical, ConfigFileName); got != want {
+		t.Errorf("ConfigFilePath() = %q, want the canonical %q", got, want)
 	}
 }

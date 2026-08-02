@@ -93,7 +93,7 @@ func TestRefreshDevicesProbesUnknownDevices(t *testing.T) {
 	clock := &fakeClock{now: time.Unix(1_700_000_000, 0)}
 	p := New(api, s, baseConfig(), WithClock(clock))
 
-	devices, err := p.RefreshDevices(context.Background())
+	devices, err := p.RefreshDevices(context.Background(), false)
 	if err != nil {
 		t.Fatalf("RefreshDevices() error = %v", err)
 	}
@@ -112,11 +112,52 @@ func TestRefreshDevicesProbesUnknownDevices(t *testing.T) {
 	// A second refresh must not re-probe: the classification is durable, and
 	// each probe costs a call against the daily quota.
 	before := api.statusCall["CO2"]
-	if _, err := p.RefreshDevices(context.Background()); err != nil {
+	if _, err := p.RefreshDevices(context.Background(), false); err != nil {
 		t.Fatalf("RefreshDevices() error = %v", err)
 	}
 	if api.statusCall["CO2"] != before {
 		t.Errorf("known device re-probed: %d calls, want %d", api.statusCall["CO2"], before)
+	}
+}
+
+func TestRefreshDevicesReprobeReclassifies(t *testing.T) {
+	// A device enabled under an older rule keeps its verdict forever, because
+	// the classification is durable. Re-probing is how a corrected rule reaches
+	// devices already in the database.
+	api := &fakeAPI{
+		devices: []switchbot.Device{{DeviceID: "HUM", DeviceName: "加湿器", DeviceType: "Humidifier2"}},
+		status: map[string]map[string]any{
+			"HUM": {"temperature": 22.0},
+		},
+	}
+	s := newStore(t)
+	p := New(api, s, baseConfig(), WithClock(&fakeClock{now: time.Unix(1_700_000_000, 0)}))
+	ctx := context.Background()
+
+	if _, err := p.RefreshDevices(ctx, false); err != nil {
+		t.Fatalf("RefreshDevices() error = %v", err)
+	}
+	if devices, _ := s.Devices(ctx); !devices[0].Enabled {
+		t.Fatal("device with a temperature reading was not enabled")
+	}
+
+	// The device stops looking like a sensor (or the rule changes).
+	api.status["HUM"] = map[string]any{"humidity": 0.0, "mode": 0.0, "childLock": 0.0}
+
+	// A plain refresh must leave the stored verdict alone...
+	if _, err := p.RefreshDevices(ctx, false); err != nil {
+		t.Fatalf("RefreshDevices() error = %v", err)
+	}
+	if devices, _ := s.Devices(ctx); !devices[0].Enabled {
+		t.Error("a plain refresh changed the classification; it must not")
+	}
+
+	// ...and a re-probe must revise it.
+	if _, err := p.RefreshDevices(ctx, true); err != nil {
+		t.Fatalf("RefreshDevices(reprobe) error = %v", err)
+	}
+	if devices, _ := s.Devices(ctx); devices[0].Enabled {
+		t.Error("re-probe did not disable a device that no longer measures the room")
 	}
 }
 
@@ -136,7 +177,7 @@ func TestRefreshDevicesHonoursExplicitCollectSet(t *testing.T) {
 	cfg.Devices = []string{"リビング"} // by name, as it reads in the app
 	p := New(api, s, cfg, WithClock(&fakeClock{now: time.Unix(1_700_000_000, 0)}))
 
-	devices, err := p.RefreshDevices(context.Background())
+	devices, err := p.RefreshDevices(context.Background(), false)
 	if err != nil {
 		t.Fatalf("RefreshDevices() error = %v", err)
 	}
@@ -163,14 +204,14 @@ func TestRefreshDevicesAppliesCollectSetChanges(t *testing.T) {
 
 	cfg := baseConfig()
 	cfg.Devices = []string{"A"}
-	if _, err := New(api, s, cfg, WithClock(clock)).RefreshDevices(context.Background()); err != nil {
+	if _, err := New(api, s, cfg, WithClock(clock)).RefreshDevices(context.Background(), false); err != nil {
 		t.Fatalf("RefreshDevices() error = %v", err)
 	}
 
 	// The user edits the list: the change must take effect, even though
 	// UpsertDevices deliberately never re-enables a device on its own.
 	cfg.Devices = []string{"B"}
-	devices, err := New(api, s, cfg, WithClock(clock)).RefreshDevices(context.Background())
+	devices, err := New(api, s, cfg, WithClock(clock)).RefreshDevices(context.Background(), false)
 	if err != nil {
 		t.Fatalf("RefreshDevices() error = %v", err)
 	}
@@ -194,7 +235,7 @@ func TestPollOnceStoresReadings(t *testing.T) {
 	p := New(api, s, baseConfig(), WithClock(&fakeClock{now: now}))
 	ctx := context.Background()
 
-	if _, err := p.RefreshDevices(ctx); err != nil {
+	if _, err := p.RefreshDevices(ctx, false); err != nil {
 		t.Fatalf("RefreshDevices() error = %v", err)
 	}
 	res, err := p.PollOnce(ctx)
@@ -236,7 +277,7 @@ func TestPollOnceSurvivesOfflineDevice(t *testing.T) {
 	s := newStore(t)
 	p := New(api, s, baseConfig(), WithClock(&fakeClock{now: time.Unix(1_700_000_000, 0)}))
 	ctx := context.Background()
-	if _, err := p.RefreshDevices(ctx); err != nil {
+	if _, err := p.RefreshDevices(ctx, false); err != nil {
 		t.Fatalf("RefreshDevices() error = %v", err)
 	}
 
@@ -274,7 +315,7 @@ func TestPollOnceCountsCallsAgainstTheDailyQuota(t *testing.T) {
 	ctx := context.Background()
 
 	// 1 device-list call + 2 probes.
-	if _, err := p.RefreshDevices(ctx); err != nil {
+	if _, err := p.RefreshDevices(ctx, false); err != nil {
 		t.Fatalf("RefreshDevices() error = %v", err)
 	}
 	if _, err := p.PollOnce(ctx); err != nil { // + 2 status calls
@@ -364,7 +405,7 @@ func TestRunBacksOffWhenRateLimited(t *testing.T) {
 	cfg.IntervalSeconds = 300
 
 	p := New(api, s, cfg, WithClock(clock))
-	if _, err := p.RefreshDevices(ctx); err != nil {
+	if _, err := p.RefreshDevices(ctx, false); err != nil {
 		t.Fatalf("RefreshDevices() error = %v", err)
 	}
 	// The account trips the quota: the API answers 401 "Unauthorized", which is
