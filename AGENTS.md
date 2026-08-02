@@ -76,6 +76,23 @@ core/
   back on. An explicit `[polling] devices` list is applied afterwards with
   `SetEnabled`, which is why `RefreshDevices` does both.
 
+- **Collection has one owner at a time, enforced not agreed.** `daemon` takes a
+  `flock` beside the database; a second one refuses to start. Two collectors
+  would not corrupt anything — SQLite handles it — but would silently spend
+  twice the daily quota. flock is used rather than a PID file because the kernel
+  releases it when the holder dies.
+
+- **`now --if-stale` is the front end's tick.** It polls only when the newest
+  reading has aged past the interval, so a menu-bar app can collect on its own
+  timer without knowing whether a daemon exists: if one is running, the data is
+  fresh and the tick costs zero calls. Do not replace this with a
+  "is the daemon loaded?" check — that is the coordination protocol it exists to
+  avoid.
+
+- **`collecting` is judged by data freshness, never by `daemon_loaded`.** The
+  collector may be launchd, a menu-bar app, or a daemon started by hand. This is
+  the same trick `active-lens-gui` uses for its recording indicator.
+
 - **The backoff resets only on a clean round.** Resetting it unconditionally
   after every poll pins the wait at one interval, so repeated rate limits never
   actually slow anything down. (Caught by `TestRunBacksOffWhenRateLimited`.)

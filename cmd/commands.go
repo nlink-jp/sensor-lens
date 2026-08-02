@@ -105,6 +105,7 @@ func runNow(args []string) error {
 	asJSON := fs.Bool("json", false, "emit JSON")
 	devices := fs.String("devices", "", "comma-separated device IDs or names to show (default: all collected)")
 	stored := fs.Bool("stored", false, "show the last stored readings instead of polling the API")
+	ifStale := fs.Bool("if-stale", false, "poll only if the stored readings have gone stale")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -115,6 +116,20 @@ func runNow(args []string) error {
 	}
 	defer e.Close()
 	ctx := signalContext()
+
+	// --if-stale is how a front end collects on its own timer without needing
+	// to know whether something else already is. If a daemon is running, the
+	// readings are fresh and this costs nothing; if nothing is running, this
+	// tick becomes the collector. No coordination protocol required.
+	if *ifStale {
+		last, err := e.store.LastReadingTime(ctx)
+		if err != nil {
+			return err
+		}
+		if !aggregate.IsStale(last, time.Now().Unix(), e.interval(), 1.0) {
+			*stored = true
+		}
+	}
 
 	if !*stored {
 		p, err := e.poller(false)
@@ -187,6 +202,17 @@ func runDaemon(args []string) error {
 		return err
 	}
 	defer e.Close()
+
+	// Only one collector per database. Two would not corrupt anything, but
+	// would quietly spend twice the daily quota.
+	lock, err := platform.AcquireCollectorLock(e.cfg.DBPath)
+	if err != nil {
+		if errors.Is(err, platform.ErrLocked) {
+			return fmt.Errorf("%w — stop the other one (`sensor-lens uninstall`, or quit the menu-bar app) before starting this", err)
+		}
+		return err
+	}
+	defer lock.Release()
 
 	p, err := e.poller(true)
 	if err != nil {
@@ -510,22 +536,29 @@ func runExport(args []string) error {
 
 // Status is what `status --json` emits; the GUI reads it.
 type Status struct {
-	Version       string `json:"schema_version"`
-	DBPath        string `json:"db_path"`
-	ConfigPath    string `json:"config_path"`
-	DaemonKind    string `json:"daemon_kind,omitempty"`
-	DaemonLoaded  bool   `json:"daemon_loaded"`
-	Installed     bool   `json:"daemon_installed"`
-	Interval      int    `json:"interval_seconds"`
-	Devices       int    `json:"devices"`
-	Collected     int    `json:"collected"`
-	Readings      int64  `json:"readings"`
-	LastReading   int64  `json:"last_reading_ts"`
-	Stale         bool   `json:"stale"`
-	CallsToday    int    `json:"calls_today"`
-	DailyBudget   int    `json:"daily_budget"`
-	ProjectedDay  int    `json:"projected_calls_per_day"`
-	HasCredential bool   `json:"has_credentials"`
+	Version      string `json:"schema_version"`
+	DBPath       string `json:"db_path"`
+	ConfigPath   string `json:"config_path"`
+	DaemonKind   string `json:"daemon_kind,omitempty"`
+	DaemonLoaded bool   `json:"daemon_loaded"`
+	Installed    bool   `json:"daemon_installed"`
+	Interval     int    `json:"interval_seconds"`
+	Devices      int    `json:"devices"`
+	Collected    int    `json:"collected"`
+	Readings     int64  `json:"readings"`
+	LastReading  int64  `json:"last_reading_ts"`
+	Stale        bool   `json:"stale"`
+	// Collecting says whether readings are arriving, judged purely by how
+	// recent the newest one is — deliberately not by whether the LaunchAgent is
+	// loaded. Collection may be coming from the daemon, from a menu-bar app
+	// ticking `now --if-stale`, or from a daemon started by hand, and an
+	// indicator that only believed in launchd would call two of those three
+	// "not collecting" while data was visibly arriving.
+	Collecting    bool `json:"collecting"`
+	CallsToday    int  `json:"calls_today"`
+	DailyBudget   int  `json:"daily_budget"`
+	ProjectedDay  int  `json:"projected_calls_per_day"`
+	HasCredential bool `json:"has_credentials"`
 }
 
 func runStatus(args []string) error {
@@ -550,6 +583,7 @@ func runStatus(args []string) error {
 		return writeJSON(st)
 	}
 
+	fmt.Printf("collecting    %s\n", collectingWord(st))
 	fmt.Printf("daemon        %s\n", daemonWord(st))
 	fmt.Printf("interval      %ds\n", st.Interval)
 	fmt.Printf("devices       %d known, %d collected\n", st.Devices, st.Collected)
@@ -600,6 +634,7 @@ func collectStatus(ctx context.Context, e *env) (Status, error) {
 		return st, err
 	}
 	st.Stale = aggregate.IsStale(st.LastReading, time.Now().Unix(), e.interval(), 0)
+	st.Collecting = st.LastReading > 0 && !st.Stale
 
 	if st.CallsToday, err = e.store.APICalls(ctx, time.Now().Format("2006-01-02")); err != nil {
 		return st, err
@@ -613,6 +648,21 @@ func collectStatus(ctx context.Context, e *env) (Status, error) {
 		st.Installed = info.ConfigPath != "" && fileExists(info.ConfigPath)
 	}
 	return st, nil
+}
+
+// collectingWord describes whether data is arriving, without claiming to know
+// who is gathering it.
+func collectingWord(st Status) string {
+	switch {
+	case st.Collecting && st.DaemonLoaded:
+		return "yes (daemon)"
+	case st.Collecting:
+		return "yes (something is polling — a menu-bar app, or a daemon run by hand)"
+	case st.LastReading == 0:
+		return "no readings yet"
+	default:
+		return "no — nothing has polled recently"
+	}
 }
 
 func daemonWord(st Status) string {

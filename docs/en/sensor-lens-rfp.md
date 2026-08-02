@@ -135,6 +135,21 @@ that recolours the bar and can notify; settings for the collect set, the
 menu-bar set, the interval and the credentials; gaps hatched into the history
 chart with the export→import route offered as the fix.
 
+**Collection while the app runs.** The GUI ticks `now --if-stale` on its own
+timer rather than requiring the LaunchAgent, which roughly halves the API spend
+by collecting only while the user is present. A "collect in the background"
+toggle installs the daemon for continuous history; when it is on, the GUI's tick
+finds fresh data and costs nothing, so the two never double-spend and no
+coordination protocol is needed. The recording indicator reads `collecting` from
+`status --json`, which is judged by data freshness — so it is green for a daemon
+started by hand as well.
+
+Two traps are already known and must be handled: **App Nap freezes the timer**
+of an `LSUIElement` app, so `ProcessInfo.beginActivity` is required and its
+token held for the app's lifetime (`claude-usage-lens-gui` shipped this bug);
+and the settings window must be a plain `Window` opened with `openWindow(id:)`,
+not a `Settings` scene, which an `LSUIElement` app cannot focus.
+
 ### Phase 3: Release
 
 Docs, signing, notarization, submodule registration, org profile, `check-org.sh`.

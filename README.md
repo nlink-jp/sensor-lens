@@ -101,6 +101,32 @@ that only reports voltage is left out, and so is a bot.
 What a menu bar shows is a separate, smaller choice, and it belongs to the GUI.
 The CLI's equivalent is `now --devices` — collect eight sensors, show two.
 
+## Who does the collecting
+
+Readings only exist while something is polling. Three arrangements work, and
+they are mutually exclusive by construction rather than by convention:
+
+| Arrangement | How | Trade-off |
+|---|---|---|
+| **Daemon** | `sensor-lens install` | Collects whether or not you are at the machine. Spends the full daily budget. |
+| **Front end** | a menu-bar app ticking `sensor-lens now --if-stale` | Collects only while the app runs, so roughly halves the spend. Gaps whenever it is closed. |
+| **Neither** | run `now` by hand | Nothing accumulates. |
+
+`now --if-stale` is what makes this safe to mix: it polls only if the newest
+stored reading has aged past the interval. If a daemon is already collecting,
+the readings are fresh and the tick costs **zero API calls**; if nothing is
+running, that tick becomes the collector. No coordination protocol, no
+configuration to keep in sync.
+
+Two daemons on one database would silently double the API spend, so `daemon`
+takes an exclusive lock and the second one refuses to start. The lock is a
+`flock`, released by the kernel, so a crash cannot leave a stale one behind.
+
+`status` reports `collecting` from how recent the newest reading is, never from
+whether the LaunchAgent is loaded — an indicator that only believed in launchd
+would call a menu-bar app or a hand-started daemon "not collecting" while data
+was visibly arriving.
+
 ## Backfilling history
 
 **The SwitchBot API has no history endpoint.** It returns the current status and

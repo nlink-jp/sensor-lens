@@ -31,6 +31,11 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Collect set (`[polling] devices`) kept separate from what any front end
   displays, so a whole house can be collected while two readings are shown.
 
+- Collection ownership: `daemon` takes an exclusive lock per database, and
+  `now --if-stale` lets a front end collect on its own timer while costing
+  nothing when a daemon is already doing it. `status` reports `collecting` from
+  data freshness rather than from whether the LaunchAgent is loaded.
+
 ### Fixed
 
 Found while first running against real hardware (30 devices):

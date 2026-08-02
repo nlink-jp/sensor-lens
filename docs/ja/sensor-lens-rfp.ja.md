@@ -125,6 +125,19 @@ HTTPS 経由の SwitchBot Open API v1.1 と、アカウント上の SwitchBot �
 任意で通知。設定は collect set / menubar set / 間隔 / 認証情報。履歴グラフには
 欠測をハッチングし、export→import の導線を出す。
 
+**アプリ稼働中はアプリが収集する。** LaunchAgent を必須とせず、GUI が自前の
+タイマーで `now --if-stale` を叩く。在席中だけ収集するので API 消費が約半分になる。
+「バックグラウンドでも収集」トグルでデーモンを install すれば連続履歴になり、
+その状態では GUI の tick は新しいデータを見つけて何もしない（コール 0）ので、
+二重消費が起きず調整プロトコルも不要。録画中インジケータは `status --json` の
+`collecting` を読む（データの新しさで判定するため、手動起動のデーモンでも緑）。
+
+既知の罠が2つあり、必ず対処する。**App Nap が `LSUIElement` アプリのタイマーを凍結する**
+ので `ProcessInfo.beginActivity` が必須で、トークンをアプリ寿命の間保持すること
+（claude-usage-lens-gui がこのバグを出荷した）。設定画面は `Settings` scene ではなく
+通常の `Window` を `openWindow(id:)` で開くこと（`LSUIElement` は Settings に
+フォーカスできない）。
+
 ### Phase 3: リリース
 
 ドキュメント、署名、notarize、submodule 登録、org profile、`check-org.sh`。
