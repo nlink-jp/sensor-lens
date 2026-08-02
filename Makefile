@@ -64,5 +64,5 @@ clean:
 # `make brew` generates this formula from the built darwin-arm64 zip into the
 # local nlink-jp/homebrew-tap checkout. The package target is unchanged.
 BREW_KIND := formula
-BREW_DESC := SwitchBot temperature, humidity and CO2 collector for the menu bar
+BREW_DESC := Collect SwitchBot temperature, humidity and CO2 into a local history
 include scripts/release-brew.mk
