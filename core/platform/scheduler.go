@@ -12,6 +12,14 @@ type DaemonInfo struct {
 	Label      string // service identifier
 	ConfigPath string // where the service config lives
 	Loaded     bool   // whether it is currently registered/loaded
+
+	// ProgramPath is the binary the service was installed to run. launchd
+	// records an absolute path at install time, so a binary that later moves —
+	// most easily by living inside a .app someone drags to the Trash — leaves a
+	// service that fails silently every time it fires.
+	ProgramPath string
+	// ProgramMissing reports that ProgramPath no longer exists.
+	ProgramMissing bool
 }
 
 // RenderDaemonConfig returns the scheduler config that would run

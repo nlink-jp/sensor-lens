@@ -39,6 +39,34 @@ func TestRenderDaemonConfig(t *testing.T) {
 	}
 }
 
+func TestProgramPathFromPlist(t *testing.T) {
+	// Round-trip against what this package actually writes, so the parser
+	// cannot drift away from the renderer.
+	rendered, err := RenderDaemonConfig("/Applications/SensorLens.app/Contents/Resources/sensor-lens")
+	if err != nil {
+		t.Fatalf("RenderDaemonConfig() error = %v", err)
+	}
+
+	got := programPathFromPlist(rendered)
+	if want := "/Applications/SensorLens.app/Contents/Resources/sensor-lens"; got != want {
+		t.Errorf("programPathFromPlist() = %q, want %q", got, want)
+	}
+}
+
+func TestProgramPathFromPlistOnJunk(t *testing.T) {
+	// A plist we did not write, or a truncated one, must yield "" rather than
+	// nonsense that would be reported as a missing binary.
+	for name, content := range map[string]string{
+		"empty":               "",
+		"no ProgramArguments": "<plist><dict><key>Label</key><string>x</string></dict></plist>",
+		"truncated":           "<key>ProgramArguments</key>\n<array>\n<string>/usr/bin/thing",
+	} {
+		if got := programPathFromPlist(content); got != "" {
+			t.Errorf("%s: programPathFromPlist() = %q, want empty", name, got)
+		}
+	}
+}
+
 func TestResolveDaemonLogPath(t *testing.T) {
 	if got := resolveDaemonLogPath("/data", nil); got != filepath.Join("/data", "daemon.log") {
 		t.Errorf("resolveDaemonLogPath() = %q, want it in the data dir", got)

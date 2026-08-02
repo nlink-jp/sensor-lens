@@ -543,12 +543,16 @@ type Status struct {
 	DaemonKind   string `json:"daemon_kind,omitempty"`
 	DaemonLoaded bool   `json:"daemon_loaded"`
 	Installed    bool   `json:"daemon_installed"`
-	Interval     int    `json:"interval_seconds"`
-	Devices      int    `json:"devices"`
-	Collected    int    `json:"collected"`
-	Readings     int64  `json:"readings"`
-	LastReading  int64  `json:"last_reading_ts"`
-	Stale        bool   `json:"stale"`
+	// DaemonProgram is the binary the service runs; DaemonProgramMissing says
+	// it is no longer there, so the service fails quietly every time it fires.
+	DaemonProgram        string `json:"daemon_program,omitempty"`
+	DaemonProgramMissing bool   `json:"daemon_program_missing,omitempty"`
+	Interval             int    `json:"interval_seconds"`
+	Devices              int    `json:"devices"`
+	Collected            int    `json:"collected"`
+	Readings             int64  `json:"readings"`
+	LastReading          int64  `json:"last_reading_ts"`
+	Stale                bool   `json:"stale"`
 	// Collecting says whether readings are arriving, judged purely by how
 	// recent the newest one is — deliberately not by whether the LaunchAgent is
 	// loaded. Collection may be coming from the daemon, from a menu-bar app
@@ -648,6 +652,8 @@ func collectStatus(ctx context.Context, e *env) (Status, error) {
 		st.DaemonKind = info.Kind
 		st.DaemonLoaded = info.Loaded
 		st.Installed = info.ConfigPath != "" && fileExists(info.ConfigPath)
+		st.DaemonProgram = info.ProgramPath
+		st.DaemonProgramMissing = info.ProgramMissing
 	}
 	return st, nil
 }
@@ -669,6 +675,10 @@ func collectingWord(st Status) string {
 
 func daemonWord(st Status) string {
 	switch {
+	case st.DaemonProgramMissing:
+		// launchd keeps a job whose program has been deleted and fails quietly
+		// every time it fires, so this has to be said out loud.
+		return fmt.Sprintf("BROKEN — installed, but %s no longer exists (reinstall with `sensor-lens install`)", st.DaemonProgram)
 	case st.DaemonLoaded:
 		return "running (launchd)"
 	case st.Installed:
@@ -782,9 +792,14 @@ func runDoctor(args []string) error {
 		return nil
 	}
 	fmt.Printf("daemon        %s (%s)\n", info.Label, info.ConfigPath)
-	if info.Loaded {
-		fmt.Printf("  ✓ loaded\n")
-	} else {
+	switch {
+	case info.ProgramMissing:
+		fmt.Printf("  ✗ it runs %s, which no longer exists — reinstall with\n"+
+			"    `sensor-lens install` (this happens when the app it lived in was\n"+
+			"    moved or deleted; launchd keeps failing quietly)\n", info.ProgramPath)
+	case info.Loaded:
+		fmt.Printf("  ✓ loaded, running %s\n", info.ProgramPath)
+	default:
 		fmt.Printf("  · not loaded — `sensor-lens install`\n")
 	}
 	return nil

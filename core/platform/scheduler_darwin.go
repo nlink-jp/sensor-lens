@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 const daemonLabel = "com.nlink-jp.sensor-lens"
@@ -117,8 +118,44 @@ func daemonStatus() (DaemonInfo, error) {
 		return DaemonInfo{}, err
 	}
 	info := DaemonInfo{Kind: "launchd", Label: daemonLabel, ConfigPath: p}
-	if _, err := os.Stat(p); err == nil {
-		info.Loaded = exec.Command("launchctl", "list", daemonLabel).Run() == nil
+
+	content, err := os.ReadFile(p)
+	if err != nil {
+		return info, nil // not installed; not an error
+	}
+	info.Loaded = exec.Command("launchctl", "list", daemonLabel).Run() == nil
+
+	// Check the recorded binary still exists. launchd will happily keep a job
+	// whose program has been deleted, failing quietly each time it fires, and
+	// the plist alone looks perfectly healthy.
+	if info.ProgramPath = programPathFromPlist(string(content)); info.ProgramPath != "" {
+		_, err := os.Stat(info.ProgramPath)
+		info.ProgramMissing = err != nil
 	}
 	return info, nil
+}
+
+// programPathFromPlist pulls the first ProgramArguments entry — the binary — out
+// of a LaunchAgent plist. Hand-parsed rather than decoded: one string from a
+// file this package wrote itself does not justify a plist dependency. Pure, so
+// the shape it expects is pinned by a test.
+func programPathFromPlist(content string) string {
+	const key = "<key>ProgramArguments</key>"
+	i := strings.Index(content, key)
+	if i < 0 {
+		return ""
+	}
+	rest := content[i+len(key):]
+
+	start := strings.Index(rest, "<string>")
+	if start < 0 {
+		return ""
+	}
+	rest = rest[start+len("<string>"):]
+
+	end := strings.Index(rest, "</string>")
+	if end < 0 {
+		return ""
+	}
+	return strings.TrimSpace(rest[:end])
 }
