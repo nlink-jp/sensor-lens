@@ -38,8 +38,14 @@ recovered from the app: export that window to CSV and ` + "`sensor-lens import`"
 Re-importing is safe — only genuinely missing samples are added.
 `
 
+// cliVersion is the build-time version, kept package-level so commands can
+// report it (a front end reading `status --json` needs to know which engine it
+// is talking to).
+var cliVersion = "dev"
+
 // Execute runs the CLI. version is injected at build time.
 func Execute(version string) {
+	cliVersion = version
 	args := os.Args[1:]
 	if len(args) == 0 {
 		fmt.Print(usage)

@@ -536,7 +536,8 @@ func runExport(args []string) error {
 
 // Status is what `status --json` emits; the GUI reads it.
 type Status struct {
-	Version      string `json:"schema_version"`
+	// CLIVersion lets a front end check which engine it is bundled with.
+	CLIVersion   string `json:"cli_version"`
 	DBPath       string `json:"db_path"`
 	ConfigPath   string `json:"config_path"`
 	DaemonKind   string `json:"daemon_kind,omitempty"`
@@ -608,6 +609,7 @@ func runStatus(args []string) error {
 
 func collectStatus(ctx context.Context, e *env) (Status, error) {
 	st := Status{
+		CLIVersion:    cliVersion,
 		DBPath:        e.cfg.DBPath,
 		ConfigPath:    e.configPath,
 		Interval:      e.cfg.IntervalSeconds,
