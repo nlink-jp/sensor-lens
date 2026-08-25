@@ -14,6 +14,7 @@ make build     # -> dist/sensor-lens  (NEVER `go build` directly)
 make test      # go test ./...
 make vet       # darwin + linux + windows (covers the build-tagged platform files)
 make package   # zip/tar.gz + notarize the darwin arm64 asset
+make verify-release  # gate: .notarized marker + freshness (run before upload)
 ```
 
 Version is injected from `git describe` via `-ldflags -X main.version`.
