@@ -6,6 +6,26 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-14
+
+### Security
+
+- **Rebuilt with Go 1.27.4, which `go.mod` now requires** (it was `go 1.26`).
+  No code of the tool changed. v0.1.0 was built with Go 1.26.5; `govulncheck
+  -mode binary` finds 15 standard-library advisories in its darwin-arm64
+  binary, in `crypto/tls`, `crypto/x509`, `encoding/asn1`, `net/http`,
+  `net/textproto` and `net/url`: GO-2026-5026, GO-2026-5972, GO-2026-6090,
+  GO-2026-6218, GO-2026-6603, GO-2026-6605, GO-2026-6607, GO-2026-6608,
+  GO-2026-6610, GO-2026-6611, GO-2026-6612, GO-2026-6613, GO-2026-6617,
+  GO-2026-6809, GO-2026-6859. All are fixed by Go 1.27.4. Binary mode shows
+  that an affected function is linked into the binary, not that the tool calls
+  it; each advisory is described at `https://pkg.go.dev/vuln/<ID>`.
+
+### Changed
+
+- `make package` runs `govulncheck ./...` first (`make vuln`) and stops on a
+  finding, so a release cannot be built past one.
+
 ### Fixed
 
 - **`make verify-release` now fails closed.** Its last block chained unzip, the
