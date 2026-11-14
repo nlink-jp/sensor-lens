@@ -15,6 +15,7 @@ make test      # go test ./...
 make test-linux # same suite on Linux (container)
 make vet       # darwin + linux + windows (covers the build-tagged platform files)
 make package   # zip/tar.gz + notarize the darwin arm64 asset
+make vuln            # govulncheck over the build; `make package` runs it first and stops on a finding
 make verify-release  # gate: notarized, fresh, runs at this version, clean linux archives (run before upload)
 ```
 
