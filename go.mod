@@ -1,6 +1,6 @@
 module github.com/nlink-jp/sensor-lens
 
-go 1.26
+go 1.27.4
 
 require modernc.org/sqlite v1.55.0
 
